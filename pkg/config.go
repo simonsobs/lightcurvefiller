@@ -1,0 +1,278 @@
+package lightcurvefiller
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type LightcurveFillerConfig struct {
+	Lightcurve      LightcurveConfiguration
+	Lightserve      LightServeConfiguration
+	Campaign        ObservingCampaign
+	NumberOfObjects int
+	PrintConfig     bool
+}
+
+// Read a boolean environment variable. Values of
+// 'yes', 'true', 'on' return true, and 'no', 'false', 'off' return false.
+func readBoolEnv(key string, missing bool) bool {
+	var missing_string string
+
+	if missing {
+		missing_string = "yes"
+	} else {
+		missing_string = "no"
+	}
+
+	value := readStringEnv(key, missing_string)
+	value = strings.ToLower(value)
+
+	switch value {
+	case "yes":
+		return true
+	case "no":
+		return false
+	case "true":
+		return true
+	case "false":
+		return false
+	case "on":
+		return true
+	case "off":
+		return false
+	default:
+		log.Panicf("Error interpreting environment variable %s as a boolean (value %s)", key, value)
+		return true
+	}
+}
+
+func readIntEnv(key string, missing int) int {
+	value := os.Getenv(key)
+
+	if len(value) > 0 {
+		integer, err := strconv.Atoi(value)
+
+		if err != nil {
+			log.Panicf("Error interpreting environment variable %s as an integer (value %s)", key, value)
+		}
+
+		return integer
+	}
+
+	return missing
+}
+
+// Read a 64-bit floating point number from an environment variable
+func readFloatEnv(key string, missing float64) float64 {
+	value := os.Getenv(key)
+
+	if len(value) > 0 {
+		number, err := strconv.ParseFloat(value, 64)
+
+		if err != nil {
+			log.Panicf("Error interpreting environment variable %s as a float (value %s)", key, value)
+		}
+
+		return number
+	}
+
+	return missing
+}
+
+func readStringEnv(key string, missing string) string {
+	value := os.Getenv(key)
+
+	if len(value) > 0 {
+		return value
+	}
+
+	return missing
+}
+
+func readTimeEnv(key string, missing time.Time) time.Time {
+	value := os.Getenv(key)
+
+	if len(value) > 0 {
+		parsed, err := time.Parse(time.DateOnly, value)
+
+		if err != nil {
+			log.Panicf("Error interpreting environment variable %s as a time (value %s)", key, value)
+		}
+
+		return parsed
+	}
+
+	return missing
+}
+
+func readDurationEnv(key string, missing time.Duration) time.Duration {
+	value := os.Getenv(key)
+
+	if len(value) > 0 {
+		parsed, err := time.ParseDuration(value)
+
+		if err != nil {
+			log.Panicf("Error interpreting environment variable %s as a duration (value %s)", key, value)
+		}
+
+		return parsed
+	}
+
+	return missing
+}
+
+// 'Read' the value of the Telescope environment variable from
+// the environment. We only support the LAT at the moment.
+func readTelescopeEnv(key string, missing string) Telescope {
+	value := readStringEnv(key, missing)
+
+	if value != "LAT" {
+		log.Panic("The LAT is the only supported telescope, you provided", value)
+	}
+
+	return CreateLAT()
+}
+
+func ReadLightcurveConfigFromEnvironment() LightcurveConfiguration {
+	return LightcurveConfiguration{
+		earliest_peak_time:     readTimeEnv("LIGHTCURVE_EARLIEST_PEAK_TIME", time.Now().Add(-time.Duration(time.Hour*8760))),
+		latest_peak_time:       readTimeEnv("LIGHTCURVE_LATEST_PEAK_TIME", time.Now()),
+		shortest_width:         readDurationEnv("LIGHTCURVE_SHORTEST_WIDTH", time.Hour*24),
+		longest_width:          readDurationEnv("LIGHTCURVE_LONGEST_WIDTH", time.Hour*512),
+		lowest_base:            readFloatEnv("LIGHTCURVE_LOWEST_BASE", 50.0),
+		highest_base:           readFloatEnv("LIGHTCURVE_HIGHEST_BASE", 500.0),
+		lowest_flare:           readFloatEnv("LIGHTCURVE_LOWEST_FLARE", 200.0),
+		highest_flare:          readFloatEnv("LIGHTCURVE_HIGHEST_FLARE", 3000.0),
+		lowest_scatter:         readFloatEnv("LIGHTCURVE_LOWEST_SCATTER", 25.0),
+		highest_scatter:        readFloatEnv("LIGHTCURVE_HIGHEST_SCATTER", 200.0),
+		lowest_spectral_index:  readFloatEnv("LIGHTCURVE_LOWEST_SPECTRAL_INDEX", -1.0),
+		highest_spectral_index: readFloatEnv("LIGHTCURVE_HIGHEST_SPECTRAL_INDEX", 2.0),
+		lowest_ra:              readFloatEnv("LIGHTCURVE_LOWEST_RA", -180.0),
+		highest_ra:             readFloatEnv("LIGHTCURVE_HIGHEST_RA", 180.0),
+		lowest_dec:             readFloatEnv("LIGHTCURVE_LOWEST_DEC", -70.0),
+		highest_dec:            readFloatEnv("LIGHTCURVE_HIGHEST_DEC", 25.0),
+		pointing:               readFloatEnv("LIGHTCURVE_POINTING", 1.0/60.0),
+	}
+}
+
+func (l LightcurveConfiguration) Print() {
+	fmt.Printf("LIGHTCURVE_EARLIEST_PEAK_TIME=%s\n", l.earliest_peak_time.Format(time.DateOnly))
+	fmt.Printf("LIGHTCURVE_LATEST_PEAK_TIME=%s\n", l.latest_peak_time.Format(time.DateOnly))
+	fmt.Printf("LIGHTCURVE_SHORTEST_WIDTH=%s\n", l.shortest_width)
+	fmt.Printf("LIGHTCURVE_LONGEST_WIDTH=%s\n", l.longest_width)
+	fmt.Printf("LIGHTCURVE_LOWEST_BASE=%f\n", l.lowest_base)
+	fmt.Printf("LIGHTCURVE_HIGHEST_BASE=%f\n", l.highest_base)
+	fmt.Printf("LIGHTCURVE_LOWEST_FLARE=%f\n", l.lowest_flare)
+	fmt.Printf("LIGHTCURVE_HIGHEST_FLARE=%f\n", l.highest_flare)
+	fmt.Printf("LIGHTCURVE_LOWEST_SCATTER=%f\n", l.lowest_scatter)
+	fmt.Printf("LIGHTCURVE_HIGHEST_SCATTER=%f\n", l.highest_scatter)
+	fmt.Printf("LIGHTCURVE_LOWEST_SPECTRAL_INDEX=%f\n", l.lowest_spectral_index)
+	fmt.Printf("LIGHTCURVE_HIGHEST_SPECTRAL_INDEX=%f\n", l.highest_spectral_index)
+	fmt.Printf("LIGHTCURVE_LOWEST_RA=%f\n", l.lowest_ra)
+	fmt.Printf("LIGHTCURVE_HIGHEST_RA=%f\n", l.highest_ra)
+	fmt.Printf("LIGHTCURVE_LOWEST_DEC=%f\n", l.lowest_dec)
+	fmt.Printf("LIGHTCURVE_HIGHEST_DEC=%f\n", l.highest_dec)
+	fmt.Printf("LIGHTCURVE_POINTING=%f\n", l.pointing)
+}
+
+func ReadLightserveConfigFromEnvironment() LightServeConfiguration {
+	return LightServeConfiguration{
+		host:       readStringEnv("LIGHTSERVE_HOST", "http://localhost:8001"),
+		batch_size: readIntEnv("LIGHTSERVE_BATCH_SIZE", 2048),
+	}
+}
+
+func (s LightServeConfiguration) Print() {
+	fmt.Printf("LIGHTSERVE_HOST=%s\n", s.host)
+	fmt.Printf("LIGHTSERVE_BATCH_SIZE=%d\n", s.batch_size)
+}
+
+func ReadObservingCampaignConfigFromEnvironment() ObservingCampaign {
+	return ObservingCampaign{
+		Start:     readTimeEnv("OBSERVATION_START", time.Now().Add(-time.Duration(time.Hour*8760))),
+		End:       readTimeEnv("OBSERVATION_END", time.Now()),
+		Interval:  readDurationEnv("OBSERVATION_INTERVAL", time.Hour*24),
+		Jitter:    readDurationEnv("OBSERVATION_JITTER", time.Minute*15),
+		Telescope: readTelescopeEnv("TELESCOPE", "LAT"),
+	}
+
+}
+
+func (c ObservingCampaign) Print() {
+	fmt.Printf("OBSERVATION_START=%s\n", c.Start.Format(time.DateOnly))
+	fmt.Printf("OBSERVATION_END=%s\n", c.End.Format(time.DateOnly))
+	fmt.Printf("OBSERVATION_INTERVAL=%s\n", c.Interval)
+	fmt.Printf("OBSERVATION_JITTER=%s\n", c.Jitter)
+	fmt.Printf("TELESCOPE=%s\n", c.Telescope.Name)
+}
+
+// Read the entire configuration from the environment. There
+// are no required parameters. By default we print the entire
+// configuration after reading it.
+func ReadConfigFromEnvironment() LightcurveFillerConfig {
+	config := LightcurveFillerConfig{
+		Lightcurve:      ReadLightcurveConfigFromEnvironment(),
+		Lightserve:      ReadLightserveConfigFromEnvironment(),
+		Campaign:        ReadObservingCampaignConfigFromEnvironment(),
+		NumberOfObjects: readIntEnv("NUMBER_OF_OBJECTS", 100),
+		PrintConfig:     readBoolEnv("PRINT_CONFIG", true),
+	}
+
+	if config.PrintConfig {
+		config.Lightcurve.Print()
+		config.Lightserve.Print()
+		config.Campaign.Print()
+		fmt.Printf("NUMBER_OF_OBJECTS=%d\n", config.NumberOfObjects)
+		fmt.Printf("PRINT_CONFIG=%s\n", "yes")
+	}
+
+	return config
+}
+
+// Run the entire observing campaign, outputting to the API.
+func (c LightcurveFillerConfig) Run() {
+	lightcurves := make([]Lightcurve, c.NumberOfObjects)
+
+	for index := range lightcurves {
+		lightcurves[index] = NewLightcurve(c.Lightcurve)
+	}
+
+	// Upload necessary metadata to lightserve
+	before_upload_instruments := time.Now()
+	c.Lightserve.UploadInstruments(c.Campaign.Telescope)
+	log.Printf("Successfully uploaded telescope information, took %d ms\n", time.Since(before_upload_instruments).Milliseconds())
+	before_upload_sources := time.Now()
+	c.Lightserve.UploadSources(lightcurves)
+	log.Printf("Successfully uploaded source metadata, took %d ms\n", time.Since(before_upload_sources).Milliseconds())
+
+	number_of_observing_periods := c.Campaign.End.Sub(c.Campaign.Start) / c.Campaign.Interval
+
+	for observing_period := range number_of_observing_periods {
+		internal_time := c.Campaign.Start.Add(c.Campaign.Interval * observing_period)
+
+		before_generation := time.Now()
+		observations := c.Campaign.ObserveLightcurvesAt(lightcurves, internal_time)
+		time_to_generate := time.Since(before_generation)
+
+		log.Printf(
+			"Generated %d observations for time %s (took %d ms)\n",
+			len(observations),
+			internal_time.Format(time.DateOnly),
+			time_to_generate.Milliseconds(),
+		)
+
+		before_upload := time.Now()
+		c.Lightserve.UploadData(observations)
+		time_to_upload := time.Since(before_upload)
+		log.Printf(
+			"Uploaded %d observations for time %s (took %d ms)\n",
+			len(observations),
+			internal_time.Format(time.DateOnly),
+			time_to_upload.Milliseconds()
+		)
+	}
+}

@@ -1,3 +1,15 @@
+// The lightcurvefiller package allows users to generate synthetic lightcurve data
+// for 'flaring' objects. This is used to test the scaliability and performance of
+// the lightserve system and lightcurvedb backends.
+//
+// [pkg/lightcurve] provides the core lightcurve generation functionality
+// [pkg/random] provides some utility functions for random number generation
+// [pkg/config] handles environment variables
+// [pkg/engine] provides the tools for generating new data points and configuring
+//
+//	the platform variables
+//
+// [pkg/api] handles interactions with the lightserve API.
 package lightcurvefiller
 
 import (
@@ -8,52 +20,32 @@ import (
 	"github.com/google/uuid"
 )
 
+// Configuration for the lightcurve generation system, sets up
+// basic parameters.
 type LightcurveConfiguration struct {
-	earliest_peak_time time.Time
-	latest_peak_time   time.Time
+	earliest_peak_time time.Time // Earliest possible flare time
+	latest_peak_time   time.Time // Latest possible flare time
 
-	shortest_width time.Duration
-	longest_width  time.Duration
+	shortest_width time.Duration // Minimum width for a single flare
+	longest_width  time.Duration // Maximum width for a single flare
 
-	lowest_base  float64
-	highest_base float64
+	lowest_base  float64 // Minimum value for 'base' flux (mJy)
+	highest_base float64 // Maximum value for 'base' flux (mJy)
 
-	lowest_flare  float64
-	highest_flare float64
+	lowest_flare  float64 // Minimum value for 'flare' flux at 90 GHz (mJy)
+	highest_flare float64 // Maximum value for 'flare' flux at 90 GHz (mJy)
 
-	lowest_scatter  float64
-	highest_scatter float64
+	lowest_scatter  float64 // Minimum value for random variation in `base` (mJy)
+	highest_scatter float64 // Maximum value for random variation in `base` (mJy)
 
-	lowest_spectral_index  float64
-	highest_spectral_index float64
+	lowest_spectral_index  float64 // Lowest spectral index to use when scaling flux to 90 GHz
+	highest_spectral_index float64 // Highest spectral index to use when scaling flux to 90 GHz
 
-	lowest_ra   float64
-	highest_ra  float64
-	lowest_dec  float64
-	highest_dec float64
-	pointing    float64
-}
-
-func SampleLightcurveConfiguration() LightcurveConfiguration {
-	return LightcurveConfiguration{
-		earliest_peak_time:     time.Now().Add(-time.Duration(time.Hour * 8760)), // 1 year
-		latest_peak_time:       time.Now(),
-		shortest_width:         time.Hour * 24,
-		longest_width:          time.Hour * 512,
-		lowest_base:            50.0,
-		highest_base:           500.0,
-		lowest_flare:           200.0,
-		highest_flare:          3000.0,
-		lowest_scatter:         25.0,
-		highest_scatter:        200.0,
-		lowest_spectral_index:  -1.0,
-		highest_spectral_index: 2.0,
-		lowest_ra:              -180.0,
-		highest_ra:             180.0,
-		lowest_dec:             -70.0,
-		highest_dec:            25.0,
-		pointing:               1.0 / 60.0,
-	}
+	lowest_ra   float64 // Lowest value of RA to use as sky position (-180 < RA < 180 is convention; deg)
+	highest_ra  float64 // Highest value of RA to use as sky position (deg)
+	lowest_dec  float64 // Lowest value of Dec to use as sky position (-90 < Dec < 90 is convention; deg)
+	highest_dec float64 // Highest value of Dec to use as sky position (deg)
+	pointing    float64 // Pointing variance to use (deg)
 }
 
 type Lightcurve struct {

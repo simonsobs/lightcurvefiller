@@ -9,15 +9,17 @@ import (
 	"net/http"
 )
 
+// Configuration for API connections to the Lightgest server
 type LightServeConfiguration struct {
-	host       string
-	batch_size int
+	host       string // Hostname (including port) of lightgest server
+	batch_size int    // Size of batches to upload data in
 }
 
 type InstrumentUploadDetails struct {
 	Detail string `json:"detail"`
 }
 
+// Helper type for uploading modules as 'instruments'
 type InstrumentUpload struct {
 	Frequency  int                     `json:"frequency"`
 	Module     string                  `json:"module"`
@@ -26,19 +28,14 @@ type InstrumentUpload struct {
 	Details    InstrumentUploadDetails `json:"details"`
 }
 
+// Helper type for batched uploads of lightcurve data
 type DataUpload struct {
 	FluxMeasurements []LightcurveDatapoint `json:"flux_measurements"`
 }
 
-func CreateSampleLightServeConfiguration() LightServeConfiguration {
-	return LightServeConfiguration{
-		host:       "http://localhost:8000",
-		batch_size: 2048,
-	}
-}
-
+// Upload source information to the Lightgest API. Currently
+// no batch endpoint is available so this may take some time.
 func (c LightServeConfiguration) UploadSources(lightcurves []Lightcurve) {
-	// Upload the source information to the API
 	url := fmt.Sprintf("%s/sources/", c.host)
 	client := &http.Client{}
 
@@ -69,8 +66,9 @@ func (c LightServeConfiguration) UploadSources(lightcurves []Lightcurve) {
 	}
 }
 
+// Upload instrument information to the Lightgest API, stored internally
+// here as 'Module' information.
 func (c LightServeConfiguration) UploadInstruments(telescope Telescope) {
-	// Upload the information about the instruments to the API.
 	instruments := make([]InstrumentUpload, len(telescope.Modules)*2)
 
 	for index, module := range telescope.Modules {
@@ -120,8 +118,9 @@ func (c LightServeConfiguration) UploadInstruments(telescope Telescope) {
 	}
 }
 
+// Upload data to the Lightgest API in batches.
+// We always use the batch endpoint, it is much faster.
 func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint) {
-	// Send batches of data to the API.
 	number_of_batches := int(math.Ceil(float64(len(data)) / float64(c.batch_size)))
 	url := fmt.Sprintf("%s/observations/batch", c.host)
 	client := &http.Client{}

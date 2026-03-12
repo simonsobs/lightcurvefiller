@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
+// Generates a random time (uniformly distributed) between
+// the start and end time.
 func GenerateRandomTimeBetween(start, end time.Time) time.Time {
-	// Generates a random time (uniformly distributed) between
-	// the start and end time.
 	start_timestamp := start.Unix()
 	end_timestamp := end.Unix()
 	length := end_timestamp - start_timestamp
@@ -18,9 +18,9 @@ func GenerateRandomTimeBetween(start, end time.Time) time.Time {
 	return random_time
 }
 
+// Generates a random duration (uniformly distributed) between two
+// durations.
 func GenerateRandomDuration(lower, upper time.Duration) time.Duration {
-	// Generates a random duration (uniformly distributed) between two
-	// durations.
 	lower_seconds := lower.Seconds()
 	upper_seconds := upper.Seconds()
 	length := upper_seconds - lower_seconds
@@ -31,7 +31,7 @@ func GenerateRandomDuration(lower, upper time.Duration) time.Duration {
 	return random_duration
 }
 
+// Uniformly distributed random float.
 func RandomFloatBetween(lower, upper float64) float64 {
-	// Uniformly distributed random float.
 	return lower + (upper-lower)*rand.Float64()
 }

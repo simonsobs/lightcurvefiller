@@ -5,25 +5,32 @@ import (
 	"time"
 )
 
+// Observing module, like an optics tube
 type Module struct {
-	Identifier  string
-	Frequencies [2]int
+	Identifier  string // Identifier of this observing module (e.g. i1)
+	Frequencies [2]int // Frequencies that this module observes at
 }
 
+// A telescope is just a collection of optics tubes
 type Telescope struct {
-	Name    string
-	Modules []Module
+	Name    string   // Name of telescope
+	Modules []Module // Observing modules of the telescope (e.g. optics tubes)
 }
 
+// Configuration of the entire observing campaign; lightcurves
+// will be observed over this period. Lightcruves will be observed
+// for 24 hours a day, taking the entirety of `Interval` to observe
+// all registered lightcurves
 type ObservingCampaign struct {
-	Start     time.Time
-	End       time.Time
-	Interval  time.Duration
+	Start     time.Time     // Start time of the osberving campaign
+	End       time.Time     // End time of the observing campaign
+	Interval  time.Duration // Interval between individaul obserations; we assume 24 observation
 	Jitter    time.Duration // The interval within which we randomly sample observation times for individual modules
-	Telescope Telescope
+	Telescope Telescope     // Telescope definition
 }
 
-func CreateSampleTelescope() Telescope {
+// Create the 13-OT LAT.
+func CreateLAT() Telescope {
 	return Telescope{
 		Name: "LAT",
 		Modules: []Module{
@@ -83,19 +90,10 @@ func CreateSampleTelescope() Telescope {
 	}
 }
 
-func CreateSampleObservingCampaign() ObservingCampaign {
-	return ObservingCampaign{
-		Start:     time.Now().Add(-time.Hour * 8760), // 1 year
-		End:       time.Now(),
-		Interval:  time.Hour * 24,
-		Jitter:    time.Minute * 15,
-		Telescope: CreateSampleTelescope(),
-	}
-}
-
+// Observe the objects! Note that we always do this in module order, so we first
+// generate the order that we'll observe the objects in. This returns the result
+// of an entire `Interval`-length observing run.
 func (o ObservingCampaign) ObserveLightcurvesAt(lightcurves []Lightcurve, t time.Time) []LightcurveDatapoint {
-	// Observe the objects! Note that we always do this in module order, so we first
-	// generate the order that we'll observe the objects in.
 	object_order := rand.Perm(len(lightcurves))
 
 	current_observation := 0
