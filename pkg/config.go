@@ -11,6 +11,7 @@ import (
 
 type LightcurveFillerConfig struct {
 	Lightcurve      LightcurveConfiguration
+	Cutout          CutoutConfiguration
 	Lightserve      LightServeConfiguration
 	Campaign        ObservingCampaign
 	NumberOfObjects int
@@ -137,6 +138,18 @@ func readTelescopeEnv(key string, missing string) Telescope {
 	return CreateLAT()
 }
 
+// 'Read' the value of the beam widths from the environment variable.
+// We only support the LAT (30, 40, 90, 150, 220, 280).
+func readBeamData(key string, missing string) map[int]float64 {
+	value := readStringEnv(key, missing)
+
+	if value != "LAT" {
+		log.Panic("The LAT is the only supported telescope for the beam, you provided", value)
+	}
+
+	return CreateLATBeams()
+}
+
 func ReadLightcurveConfigFromEnvironment() LightcurveConfiguration {
 	return LightcurveConfiguration{
 		earliest_peak_time:     readTimeEnv("LIGHTCURVE_EARLIEST_PEAK_TIME", time.Now().Add(-time.Duration(time.Hour*8760))),
@@ -179,6 +192,27 @@ func (l LightcurveConfiguration) Print() {
 	fmt.Printf("LIGHTCURVE_POINTING=%f\n", l.pointing)
 }
 
+func ReadCutoutConfigFromEnvironment() CutoutConfiguration {
+	return CutoutConfiguration{
+		enabled:    readBoolEnv("CUTOUT_ENABLE", true),
+		size:       CUTOUT_SIZE,
+		pixel_size: readFloatEnv("CUTOUT_PIXEL_SIZE", 0.5/60.0),
+		beam_size:  readBeamData("CUTOUT_BEAMS", "LAT"),
+		units:      readStringEnv("CUTOUT_UNITS", "mJy"),
+	}
+}
+
+func (c CutoutConfiguration) Print() {
+	enable_string := "no"
+	if c.enabled {
+		enable_string = "yes"
+	}
+	fmt.Printf("CUTOUT_ENABLE=%s\n", enable_string)
+	fmt.Printf("CUTOUT_PIXEL_SIZE=%f\n", c.pixel_size)
+	fmt.Printf("CUTOUT_BEAMS", "LAT")
+	fmt.Printf("CUTOUT_UNITS", c.units)
+}
+
 func ReadLightserveConfigFromEnvironment() LightServeConfiguration {
 	return LightServeConfiguration{
 		host:       readStringEnv("LIGHTSERVE_HOST", "http://localhost:8001"),
@@ -216,6 +250,7 @@ func (c ObservingCampaign) Print() {
 func ReadConfigFromEnvironment() LightcurveFillerConfig {
 	config := LightcurveFillerConfig{
 		Lightcurve:      ReadLightcurveConfigFromEnvironment(),
+		Cutout:          ReadCutoutConfigFromEnvironment(),
 		Lightserve:      ReadLightserveConfigFromEnvironment(),
 		Campaign:        ReadObservingCampaignConfigFromEnvironment(),
 		NumberOfObjects: readIntEnv("NUMBER_OF_OBJECTS", 100),
@@ -224,6 +259,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 
 	if config.PrintConfig {
 		config.Lightcurve.Print()
+		config.Cutout.Print()
 		config.Lightserve.Print()
 		config.Campaign.Print()
 		fmt.Printf("NUMBER_OF_OBJECTS=%d\n", config.NumberOfObjects)
@@ -265,14 +301,30 @@ func (c LightcurveFillerConfig) Run() {
 			time_to_generate.Milliseconds(),
 		)
 
+		var cutouts []Cutout = nil
+		if c.Cutout.enabled {
+			before_cutout := time.Now()
+			cutouts = make([]Cutout, len(observations))
+			for index := range cutouts {
+				cutouts[index] = c.Cutout.GenerateCutout(observations[index])
+			}
+			time_to_cutout := time.Since(before_cutout)
+			log.Printf(
+				"Generated %d cutouts for time %s (took %d ms)\n",
+				len(cutouts),
+				internal_time.Format(time.DateOnly),
+				time_to_cutout.Milliseconds(),
+			)
+		}
+
 		before_upload := time.Now()
-		c.Lightserve.UploadData(observations)
+		c.Lightserve.UploadData(observations, cutouts)
 		time_to_upload := time.Since(before_upload)
 		log.Printf(
 			"Uploaded %d observations for time %s (took %d ms)\n",
 			len(observations),
 			internal_time.Format(time.DateOnly),
-			time_to_upload.Milliseconds()
+			time_to_upload.Milliseconds(),
 		)
 	}
 }

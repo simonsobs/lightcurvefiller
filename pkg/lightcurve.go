@@ -110,6 +110,9 @@ func (l Lightcurve) GenerateDataPoint(t time.Time, m Module) [2]LightcurveDatapo
 	freq_offset_a := math.Pow(float64(m.Frequencies[0])/90.0, l.spectral_index)
 	freq_offset_b := math.Pow(float64(m.Frequencies[1])/90.0, l.spectral_index)
 
+	flare_flux_a := flare_flux_base * freq_offset_a
+	flare_flux_b := flare_flux_base * freq_offset_b
+
 	return [2]LightcurveDatapoint{
 		{
 			SourceID:       l.SourceID,
@@ -120,7 +123,7 @@ func (l Lightcurve) GenerateDataPoint(t time.Time, m Module) [2]LightcurveDatapo
 			Dec:            l.Dec,
 			RaUncertainty:  RandomFloatBetween(0.5*l.pointing, l.pointing),
 			DecUncertainty: RandomFloatBetween(0.5*l.pointing, l.pointing),
-			Flux:           flux + flare_flux_base*freq_offset_a,
+			Flux:           flux + flare_flux_a,
 			FluxErr:        RandomFloatBetween(0.5*l.scatter, l.scatter),
 		},
 		{
@@ -132,7 +135,7 @@ func (l Lightcurve) GenerateDataPoint(t time.Time, m Module) [2]LightcurveDatapo
 			Dec:            l.Dec,
 			RaUncertainty:  RandomFloatBetween(0.5*l.pointing, l.pointing),
 			DecUncertainty: RandomFloatBetween(0.5*l.pointing, l.pointing),
-			Flux:           flux + flare_flux_base*freq_offset_b,
+			Flux:           flux + flare_flux_b,
 			FluxErr:        RandomFloatBetween(0.5*l.scatter, l.scatter),
 		},
 	}

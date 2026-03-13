@@ -35,3 +35,12 @@ func GenerateRandomDuration(lower, upper time.Duration) time.Duration {
 func RandomFloatBetween(lower, upper float64) float64 {
 	return lower + (upper-lower)*rand.Float64()
 }
+
+// Random sign, 50/50 +1 or -1 float.
+func RandomSign() float64 {
+	if rand.Float64() < 0.5 {
+		return -1.0
+	} else {
+		return 1.0
+	}
+}

@@ -31,6 +31,7 @@ type InstrumentUpload struct {
 // Helper type for batched uploads of lightcurve data
 type DataUpload struct {
 	FluxMeasurements []LightcurveDatapoint `json:"flux_measurements"`
+	Cutouts          []Cutout              `json:"cutouts"`
 }
 
 // Upload source information to the Lightgest API. Currently
@@ -120,7 +121,7 @@ func (c LightServeConfiguration) UploadInstruments(telescope Telescope) {
 
 // Upload data to the Lightgest API in batches.
 // We always use the batch endpoint, it is much faster.
-func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint) {
+func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts []Cutout) {
 	number_of_batches := int(math.Ceil(float64(len(data)) / float64(c.batch_size)))
 	url := fmt.Sprintf("%s/observations/batch", c.host)
 	client := &http.Client{}
@@ -128,8 +129,18 @@ func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint) {
 	for batch := range number_of_batches {
 		start_batch := batch * c.batch_size
 		end_batch := min((batch+1)*c.batch_size, len(data))
+
+		var batched_cutouts []Cutout
+
+		if cutouts != nil {
+			batched_cutouts = cutouts[start_batch:end_batch]
+		} else {
+			batched_cutouts = nil
+		}
+
 		json_batch, err := json.Marshal(DataUpload{
 			FluxMeasurements: data[start_batch:end_batch],
+			Cutouts:          batched_cutouts,
 		})
 
 		if err != nil {
