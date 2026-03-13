@@ -197,7 +197,7 @@ func ReadCutoutConfigFromEnvironment() CutoutConfiguration {
 		enabled:    readBoolEnv("CUTOUT_ENABLE", true),
 		size:       CUTOUT_SIZE,
 		pixel_size: readFloatEnv("CUTOUT_PIXEL_SIZE", 0.5/60.0),
-		beam_size:  readBeamData("CUTOUT_BEAMS", "LAT"),
+		beam_size:  readBeamData("TELESCOPE", "LAT"),
 		units:      readStringEnv("CUTOUT_UNITS", "mJy"),
 	}
 }
@@ -209,8 +209,7 @@ func (c CutoutConfiguration) Print() {
 	}
 	fmt.Printf("CUTOUT_ENABLE=%s\n", enable_string)
 	fmt.Printf("CUTOUT_PIXEL_SIZE=%f\n", c.pixel_size)
-	fmt.Printf("CUTOUT_BEAMS", "LAT")
-	fmt.Printf("CUTOUT_UNITS", c.units)
+	fmt.Printf("CUTOUT_UNITS=%s\n", c.units)
 }
 
 func ReadLightserveConfigFromEnvironment() LightServeConfiguration {

@@ -11,11 +11,11 @@ import (
 const CUTOUT_SIZE int = 32
 
 type CutoutConfiguration struct {
-	enabled    bool
-	size       int
-	pixel_size float64
-	beam_size  map[int]float64
-	units      string
+	enabled    bool            // Whether to generate cutouts or not
+	size       int             // Size in pixels (not actually dynamically configurable)
+	pixel_size float64         // The size of each pixel (degrees)
+	beam_size  map[int]float64 // Beam size mapping frequency -> degrees
+	units      string          // Units that the cutouts are in
 }
 
 type Cutout struct {
