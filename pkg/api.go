@@ -11,8 +11,11 @@ import (
 
 // Configuration for API connections to the Lightgest server
 type LightServeConfiguration struct {
-	host       string // Hostname (including port) of lightgest server
-	batch_size int    // Size of batches to upload data in
+	host              string // Hostname (including port) of lightgest server
+	batch_size        int    // Size of batches to upload data in
+	use_bearer        bool   // Whether to use the Bearer token
+	bearer            string // Bearer token (only used if use_bearer)
+	allow_self_signed bool   // Whether to allow self-signed certificates
 }
 
 type InstrumentUploadDetails struct {
@@ -37,14 +40,19 @@ type DataUpload struct {
 // Upload source information to the Lightgest API. Currently
 // no batch endpoint is available so this may take some time.
 func (c LightServeConfiguration) UploadSources(lightcurves []Lightcurve) {
-	url := fmt.Sprintf("%s/sources/", c.host)
-	client := &http.Client{}
+	url := fmt.Sprintf("%s/sources/batch", c.host)
+	client := c.GetClient()
+	number_of_batches := int(math.Ceil(float64(len(lightcurves)) / float64(c.batch_size)))
 
-	for _, source := range lightcurves {
-		json_content, err := json.Marshal(source)
+	for batch := range number_of_batches {
+		start_batch := batch * c.batch_size
+		end_batch := min((batch+1)*c.batch_size, len(lightcurves))
+
+		batched_data := lightcurves[start_batch:end_batch]
+		json_content, err := json.Marshal(batched_data)
 
 		if err != nil {
-			log.Panic("Could not marshal source to JSON ", source)
+			log.Panic("Could not marshal source batch to JSON")
 		}
 
 		request, err := http.NewRequest(
@@ -57,12 +65,10 @@ func (c LightServeConfiguration) UploadSources(lightcurves []Lightcurve) {
 			log.Panic("Error creating HTTP request")
 		}
 
-		request.Header.Add("Content-Type", "application/json")
-
 		res, err := client.Do(request)
 
 		if err != nil || res.StatusCode != 200 {
-			log.Panic("Failed to send data to /sources/ endpoint ", res)
+			log.Panic("Failed to send data to /sources/batch endpoint ", res)
 		}
 	}
 }
@@ -90,7 +96,7 @@ func (c LightServeConfiguration) UploadInstruments(telescope Telescope) {
 	}
 
 	url := fmt.Sprintf("%s/instruments/", c.host)
-	client := &http.Client{}
+	client := c.GetClient()
 
 	for _, instrument := range instruments {
 		json_content, err := json.Marshal(instrument)
@@ -109,12 +115,10 @@ func (c LightServeConfiguration) UploadInstruments(telescope Telescope) {
 			log.Panic("Error creating HTTP request")
 		}
 
-		request.Header.Add("Content-Type", "application/json")
-
 		res, err := client.Do(request)
 
 		if err != nil || res.StatusCode != 200 {
-			log.Panic("Failed to send data to /instruments/ endpoint ", res)
+			log.Panic("Failed to send data to /instruments/ endpoint ", res, err)
 		}
 	}
 }
@@ -124,7 +128,7 @@ func (c LightServeConfiguration) UploadInstruments(telescope Telescope) {
 func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts []Cutout) {
 	number_of_batches := int(math.Ceil(float64(len(data)) / float64(c.batch_size)))
 	url := fmt.Sprintf("%s/observations/batch", c.host)
-	client := &http.Client{}
+	client := c.GetClient()
 
 	for batch := range number_of_batches {
 		start_batch := batch * c.batch_size
@@ -152,8 +156,6 @@ func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts 
 			url,
 			bytes.NewBuffer(json_batch),
 		)
-
-		request.Header.Add("Content-Type", "application/json")
 
 		if err != nil {
 			log.Panic("Error creating HTTP request")

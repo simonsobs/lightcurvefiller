@@ -16,6 +16,7 @@ type LightcurveFillerConfig struct {
 	Campaign        ObservingCampaign
 	NumberOfObjects int
 	PrintConfig     bool
+	LogToFile       string
 }
 
 // Read a boolean environment variable. Values of
@@ -214,14 +215,30 @@ func (c CutoutConfiguration) Print() {
 
 func ReadLightserveConfigFromEnvironment() LightServeConfiguration {
 	return LightServeConfiguration{
-		host:       readStringEnv("LIGHTSERVE_HOST", "http://localhost:8001"),
-		batch_size: readIntEnv("LIGHTSERVE_BATCH_SIZE", 2048),
+		host:              readStringEnv("LIGHTSERVE_HOST", "http://localhost:8001"),
+		batch_size:        readIntEnv("LIGHTSERVE_BATCH_SIZE", 2048),
+		use_bearer:        readBoolEnv("LIGHTSERVE_USE_BEARER", false),
+		bearer:            readStringEnv("LIGHTSERVE_BEARER_TOKEN", ""),
+		allow_self_signed: readBoolEnv("LIGHTSERVE_ALLOW_SELF_SIGNED", false),
 	}
 }
 
 func (s LightServeConfiguration) Print() {
+	enable_string := "no"
+	if s.use_bearer {
+		enable_string = "yes"
+	}
+
+	self_signed_string := "no"
+	if s.allow_self_signed {
+		self_signed_string = "yes"
+	}
+
 	fmt.Printf("LIGHTSERVE_HOST=%s\n", s.host)
 	fmt.Printf("LIGHTSERVE_BATCH_SIZE=%d\n", s.batch_size)
+	fmt.Printf("LIGHTSERVE_USE_BEARER=%s\n", enable_string)
+	fmt.Printf("LIGHTSERVE_BEARER_TOKEN=%s\n", s.bearer)
+	fmt.Printf("LIGHTSERVE_ALLOW_SELF_SIGNED=%s\n", self_signed_string)
 }
 
 func ReadObservingCampaignConfigFromEnvironment() ObservingCampaign {
@@ -254,6 +271,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		Campaign:        ReadObservingCampaignConfigFromEnvironment(),
 		NumberOfObjects: readIntEnv("NUMBER_OF_OBJECTS", 100),
 		PrintConfig:     readBoolEnv("PRINT_CONFIG", true),
+		LogToFile:       readStringEnv("LOG_FILE", ""),
 	}
 
 	if config.PrintConfig {
@@ -263,6 +281,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		config.Campaign.Print()
 		fmt.Printf("NUMBER_OF_OBJECTS=%d\n", config.NumberOfObjects)
 		fmt.Printf("PRINT_CONFIG=%s\n", "yes")
+		fmt.Printf("LOG_FILE=%s\n", config.LogToFile)
 	}
 
 	return config
@@ -270,6 +289,16 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 
 // Run the entire observing campaign, outputting to the API.
 func (c LightcurveFillerConfig) Run() {
+	if c.LogToFile != "" {
+		file, err := os.OpenFile(c.LogToFile, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			fmt.Printf("Error opening file: %v\n", err)
+		}
+		fmt.Println("Logging set up, directed to file ", c.LogToFile)
+		log.SetOutput(file)
+		defer file.Close()
+	}
+
 	lightcurves := make([]Lightcurve, c.NumberOfObjects)
 
 	for index := range lightcurves {
