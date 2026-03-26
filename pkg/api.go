@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"time"
 )
 
 // Configuration for API connections to the Lightgest server
@@ -16,6 +17,7 @@ type LightServeConfiguration struct {
 	use_bearer        bool   // Whether to use the Bearer token
 	bearer            string // Bearer token (only used if use_bearer)
 	allow_self_signed bool   // Whether to allow self-signed certificates
+	enable            bool   // Whether to actually upload things to lightserve
 }
 
 type InstrumentUploadDetails struct {
@@ -151,20 +153,38 @@ func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts 
 			log.Panic("Could not marshal lightcurve data to JSON")
 		}
 
-		request, err := http.NewRequest(
-			http.MethodPut,
-			url,
-			bytes.NewBuffer(json_batch),
-		)
+		status_code := 999
+		failures := 0
 
-		if err != nil {
-			log.Panic("Error creating HTTP request")
+		for status_code != 200 {
+			request, err := http.NewRequest(
+				http.MethodPut,
+				url,
+				bytes.NewBuffer(json_batch),
+			)
+
+			if err != nil {
+				log.Panic("Error creating HTTP request")
+			}
+
+			res, err := client.Do(request)
+
+			if err != nil {
+				log.Println("Failed to send data to /observations/batch endpoint ", res)
+			}
+
+			status_code = res.StatusCode
+
+			if status_code != 200 {
+				log.Printf("Error uploading data: %d", status_code)
+				time.Sleep(time.Duration(failures*5) * time.Second)
+				failures += 1
+			}
+
+			if failures > 5 {
+				log.Panic("Failed over 5 times to send data to API endpoint")
+			}
 		}
 
-		res, err := client.Do(request)
-
-		if err != nil || res.StatusCode != 200 {
-			log.Panic("Failed to send data to /sources/batch endpoint ", res)
-		}
 	}
 }

@@ -14,6 +14,7 @@ type LightcurveFillerConfig struct {
 	Cutout          CutoutConfiguration
 	Lightserve      LightServeConfiguration
 	Campaign        ObservingCampaign
+	Parquet         ParquetConfiguration
 	NumberOfObjects int
 	PrintConfig     bool
 	LogToFile       string
@@ -220,13 +221,14 @@ func ReadLightserveConfigFromEnvironment() LightServeConfiguration {
 		use_bearer:        readBoolEnv("LIGHTSERVE_USE_BEARER", false),
 		bearer:            readStringEnv("LIGHTSERVE_BEARER_TOKEN", ""),
 		allow_self_signed: readBoolEnv("LIGHTSERVE_ALLOW_SELF_SIGNED", false),
+		enable:            readBoolEnv("LIGHTSERVE_ENABLE", true),
 	}
 }
 
 func (s LightServeConfiguration) Print() {
-	enable_string := "no"
+	bearer_string := "no"
 	if s.use_bearer {
-		enable_string = "yes"
+		bearer_string = "yes"
 	}
 
 	self_signed_string := "no"
@@ -234,11 +236,40 @@ func (s LightServeConfiguration) Print() {
 		self_signed_string = "yes"
 	}
 
+	enable_string := "no"
+	if s.enable {
+		enable_string = "yes"
+	}
+
 	fmt.Printf("LIGHTSERVE_HOST=%s\n", s.host)
 	fmt.Printf("LIGHTSERVE_BATCH_SIZE=%d\n", s.batch_size)
-	fmt.Printf("LIGHTSERVE_USE_BEARER=%s\n", enable_string)
+	fmt.Printf("LIGHTSERVE_USE_BEARER=%s\n", bearer_string)
 	fmt.Printf("LIGHTSERVE_BEARER_TOKEN=%s\n", s.bearer)
 	fmt.Printf("LIGHTSERVE_ALLOW_SELF_SIGNED=%s\n", self_signed_string)
+	fmt.Printf("LIGHTSERVE_ENABLE=%s\n", enable_string)
+}
+
+func ReadParquetConfiguration() ParquetConfiguration {
+	return ParquetConfiguration{
+		enable:    readBoolEnv("PARQUET_ENABLE", false),
+		base_path: readStringEnv("PARQUET_BASE_PATH", "."),
+		compress:  readBoolEnv("PARQUET_COMPRESS", true),
+	}
+}
+
+func (p ParquetConfiguration) Print() {
+	enable_string := "no"
+	if p.enable {
+		enable_string = "yes"
+	}
+	compress_string := "no"
+	if p.compress {
+		compress_string = "yes"
+	}
+
+	fmt.Printf("PARQUET_ENABLE=%s\n", enable_string)
+	fmt.Printf("PARQUET_BASE_PATH=%s\n", p.base_path)
+	fmt.Printf("PARQUET_COMPRESS=%s\n", compress_string)
 }
 
 func ReadObservingCampaignConfigFromEnvironment() ObservingCampaign {
@@ -269,6 +300,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		Cutout:          ReadCutoutConfigFromEnvironment(),
 		Lightserve:      ReadLightserveConfigFromEnvironment(),
 		Campaign:        ReadObservingCampaignConfigFromEnvironment(),
+		Parquet:         ReadParquetConfiguration(),
 		NumberOfObjects: readIntEnv("NUMBER_OF_OBJECTS", 100),
 		PrintConfig:     readBoolEnv("PRINT_CONFIG", true),
 		LogToFile:       readStringEnv("LOG_FILE", ""),
@@ -279,6 +311,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		config.Cutout.Print()
 		config.Lightserve.Print()
 		config.Campaign.Print()
+		config.Parquet.Print()
 		fmt.Printf("NUMBER_OF_OBJECTS=%d\n", config.NumberOfObjects)
 		fmt.Printf("PRINT_CONFIG=%s\n", "yes")
 		fmt.Printf("LOG_FILE=%s\n", config.LogToFile)
@@ -306,12 +339,20 @@ func (c LightcurveFillerConfig) Run() {
 	}
 
 	// Upload necessary metadata to lightserve
-	before_upload_instruments := time.Now()
-	c.Lightserve.UploadInstruments(c.Campaign.Telescope)
-	log.Printf("Successfully uploaded telescope information, took %d ms\n", time.Since(before_upload_instruments).Milliseconds())
-	before_upload_sources := time.Now()
-	c.Lightserve.UploadSources(lightcurves)
-	log.Printf("Successfully uploaded source metadata, took %d ms\n", time.Since(before_upload_sources).Milliseconds())
+	if c.Lightserve.enable {
+		before_upload_instruments := time.Now()
+		c.Lightserve.UploadInstruments(c.Campaign.Telescope)
+		log.Printf(
+			"Successfully uploaded telescope information, took %d ms\n",
+			time.Since(before_upload_instruments).Milliseconds(),
+		)
+		before_upload_sources := time.Now()
+		c.Lightserve.UploadSources(lightcurves)
+		log.Printf(
+			"Successfully uploaded source metadata, took %d ms\n",
+			time.Since(before_upload_sources).Milliseconds(),
+		)
+	}
 
 	number_of_observing_periods := c.Campaign.End.Sub(c.Campaign.Start) / c.Campaign.Interval
 
@@ -345,14 +386,31 @@ func (c LightcurveFillerConfig) Run() {
 			)
 		}
 
-		before_upload := time.Now()
-		c.Lightserve.UploadData(observations, cutouts)
-		time_to_upload := time.Since(before_upload)
-		log.Printf(
-			"Uploaded %d observations for time %s (took %d ms)\n",
-			len(observations),
-			internal_time.Format(time.DateOnly),
-			time_to_upload.Milliseconds(),
-		)
+		if c.Parquet.enable {
+			before_parquet := time.Now()
+			err := c.Parquet.WriteData(observations, internal_time)
+			time_to_parquet := time.Since(before_parquet)
+			log.Printf(
+				"Wrote parquet data to disk for time %s (took %d ms)\n",
+				internal_time.Format(time.DateOnly),
+				time_to_parquet.Milliseconds(),
+			)
+
+			if err != nil {
+				log.Printf("Unable to write parquet file\n")
+			}
+		}
+
+		if c.Lightserve.enable {
+			before_upload := time.Now()
+			c.Lightserve.UploadData(observations, cutouts)
+			time_to_upload := time.Since(before_upload)
+			log.Printf(
+				"Uploaded %d observations for time %s (took %d ms)\n",
+				len(observations),
+				internal_time.Format(time.DateOnly),
+				time_to_upload.Milliseconds(),
+			)
+		}
 	}
 }
