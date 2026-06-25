@@ -252,6 +252,8 @@ func (s LightServeConfiguration) Print() {
 	upload_instruments_string := "no"
 	if s.upload_instruments {
 		upload_instruments_string = "yes"
+	}
+
 	parquet_string := "no"
 	if s.upload_parquet {
 		parquet_string = "yes"
