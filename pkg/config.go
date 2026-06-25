@@ -216,15 +216,15 @@ func (c CutoutConfiguration) Print() {
 
 func ReadLightserveConfigFromEnvironment() LightServeConfiguration {
 	return LightServeConfiguration{
-  	host:              readStringEnv("LIGHTSERVE_HOST", "http://localhost:8001"),
-		batch_size:        readIntEnv("LIGHTSERVE_BATCH_SIZE", 2048),
-		use_bearer:        readBoolEnv("LIGHTSERVE_USE_BEARER", false),
-		upload_parquet:    readBoolEnv("LIGHTSERVE_UPLOAD_PARQUET", false),
-		bearer:            readStringEnv("LIGHTSERVE_BEARER_TOKEN", ""),
-		allow_self_signed: readBoolEnv("LIGHTSERVE_ALLOW_SELF_SIGNED", false),
-		enable:            readBoolEnv("LIGHTSERVE_ENABLE", true),
-		number_of_workers: readIntEnv("LIGHTSERVE_NUMBER_OF_WORKERS", 1),
-    upload_instruments: readBoolEnv("LIGHTSERVE_UPLOAD_INSTRUMENTS", true),
+		host:               readStringEnv("LIGHTSERVE_HOST", "http://localhost:8001"),
+		batch_size:         readIntEnv("LIGHTSERVE_BATCH_SIZE", 2048),
+		use_bearer:         readBoolEnv("LIGHTSERVE_USE_BEARER", false),
+		upload_parquet:     readBoolEnv("LIGHTSERVE_UPLOAD_PARQUET", false),
+		bearer:             readStringEnv("LIGHTSERVE_BEARER_TOKEN", ""),
+		allow_self_signed:  readBoolEnv("LIGHTSERVE_ALLOW_SELF_SIGNED", false),
+		enable:             readBoolEnv("LIGHTSERVE_ENABLE", true),
+		number_of_workers:  readIntEnv("LIGHTSERVE_NUMBER_OF_WORKERS", 1),
+		upload_instruments: readBoolEnv("LIGHTSERVE_UPLOAD_INSTRUMENTS", true),
 	}
 }
 
