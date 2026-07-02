@@ -1,4 +1,4 @@
-cpackage lightcurvefiller
+package lightcurvefiller
 
 import (
 	"bytes"
