@@ -10,6 +10,7 @@
 //	the platform variables
 //
 // [pkg/api] handles interactions with the lightserve API.
+// [pkg/read] handles read interactions with the lightserve API.
 package lightcurvefiller
 
 import (

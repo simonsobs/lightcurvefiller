@@ -15,6 +15,7 @@ type LightcurveFillerConfig struct {
 	Lightserve      LightServeConfiguration
 	Campaign        ObservingCampaign
 	Parquet         ParquetConfiguration
+	Reader          ReaderConfiguration
 	NumberOfObjects int
 	PrintConfig     bool
 	LogToFile       string
@@ -312,6 +313,71 @@ func (c ObservingCampaign) Print() {
 	fmt.Printf("TELESCOPE=%s\n", c.Telescope.Name)
 }
 
+func ReadReaderConfigurationFromEnvironment() ReaderConfiguration {
+	return ReaderConfiguration{
+		enable:            readBoolEnv("READER_ENABLE", true),
+		host:              readStringEnv("READER_HOST", "http://localhost:8000"),
+		use_bearer:        readBoolEnv("READER_USE_BEARER", false),
+		bearer:            readStringEnv("READER_BEARER_TOKEN", ""),
+		allow_self_signed: readBoolEnv("READER_ALLOW_SELF_SIGNED", true),
+		sources_to_read:   readIntEnv("READER_SOURCES_TO_READ", 100),
+		read_frequency:    readBoolEnv("READER_READ_FREQUENCY", true),
+		read_all:          readBoolEnv("READER_READ_ALL", true),
+		read_summary:      readBoolEnv("READER_READ_SUMMARY", true),
+		start_time:        readTimeEnv("READER_START", time.Now().Add(-time.Duration(time.Hour*8760))),
+		end_time:          readTimeEnv("READER_START", time.Now()),
+	}
+}
+
+func (c ReaderConfiguration) Print() {
+	enable_string := "no"
+	if c.enable {
+		enable_string = "yes"
+	}
+
+	bearer_string := "no"
+	if c.use_bearer {
+		bearer_string = "yes"
+	}
+
+	self_signed_string := "no"
+	if c.allow_self_signed {
+		self_signed_string = "yes"
+	}
+
+	frequency_string := "no"
+	if c.read_frequency {
+		frequency_string = "yes"
+	}
+
+	all_string := "no"
+	if c.read_all {
+		all_string = "yes"
+	}
+
+	summary_string := "no"
+	if c.read_summary {
+		summary_string = "yes"
+	}
+
+	bearer_token_string := ""
+	if c.bearer != "" {
+		bearer_token_string = "<set>"
+	}
+
+	fmt.Printf("READER_ENABLE=%s\n", enable_string)
+	fmt.Printf("READER_HOST=%s\n", c.host)
+	fmt.Printf("READER_USE_BEARER=%s\n", bearer_string)
+	fmt.Printf("READER_BEARER_TOKEN=%s\n", bearer_token_string)
+	fmt.Printf("READER_ALLOW_SELF_SIGNED=%s\n", self_signed_string)
+	fmt.Printf("READER_SOURCES_TO_READ=%d\n", c.sources_to_read)
+	fmt.Printf("READER_READ_FREQUENCY=%s\n", frequency_string)
+	fmt.Printf("READER_READ_ALL=%s\n", all_string)
+	fmt.Printf("READER_READ_SUMMARY=%s\n", summary_string)
+	fmt.Printf("READER_START=%s\n", c.start_time.Format(time.DateOnly))
+	fmt.Printf("READER_END=%s\n", c.end_time.Format(time.DateOnly))
+}
+
 // Read the entire configuration from the environment. There
 // are no required parameters. By default we print the entire
 // configuration after reading it.
@@ -322,6 +388,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		Lightserve:      ReadLightserveConfigFromEnvironment(),
 		Campaign:        ReadObservingCampaignConfigFromEnvironment(),
 		Parquet:         ReadParquetConfiguration(),
+		Reader:          ReadReaderConfigurationFromEnvironment(),
 		NumberOfObjects: readIntEnv("NUMBER_OF_OBJECTS", 100),
 		PrintConfig:     readBoolEnv("PRINT_CONFIG", true),
 		LogToFile:       readStringEnv("LOG_FILE", ""),
@@ -333,6 +400,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		config.Lightserve.Print()
 		config.Campaign.Print()
 		config.Parquet.Print()
+		config.Reader.Print()
 		fmt.Printf("NUMBER_OF_OBJECTS=%d\n", config.NumberOfObjects)
 		fmt.Printf("PRINT_CONFIG=%s\n", "yes")
 		fmt.Printf("LOG_FILE=%s\n", config.LogToFile)
@@ -452,5 +520,17 @@ func (c LightcurveFillerConfig) Run() {
 				time_to_upload.Milliseconds(),
 			)
 		}
+	}
+
+	if c.Reader.enable {
+		log.Printf("Reading information back for %d sources\n", c.Reader.sources_to_read)
+
+		before_read := time.Now()
+		c.Reader.ReadData()
+		time_to_read := time.Since(before_read)
+		log.Printf(
+			"Total time for all reading operations %d ms",
+			time_to_read.Milliseconds(),
+		)
 	}
 }

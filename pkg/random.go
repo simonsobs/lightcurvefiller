@@ -36,6 +36,11 @@ func RandomFloatBetween(lower, upper float64) float64 {
 	return lower + (upper-lower)*rand.Float64()
 }
 
+// Uniformly distributed random integer.
+func RandomIntegerBetween(lower, upper int) int {
+	return lower + rand.Intn(upper-lower)
+}
+
 // Random sign, 50/50 +1 or -1 float.
 func RandomSign() float64 {
 	if rand.Float64() < 0.5 {
