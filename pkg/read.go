@@ -10,8 +10,6 @@ import (
 	"math"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type ReaderConfiguration struct {
@@ -30,7 +28,13 @@ type ReaderConfiguration struct {
 
 // JSON Response from /sources; only partial information is required
 type sourceResponse struct {
-	source_id uuid.UUID // SourceID
+	SourceID string         `json:"source_id"` // SourceID
+	SOCatID  string         `json:"socat_id"`
+	Name     string         `json:"name"`
+	RA       float64        `json:"ra"`
+	Dec      float64        `json:"dec"`
+	Variable bool           `json:"variable"`
+	Extra    map[string]any `json:"extra"`
 }
 
 type ReadBenchmarkResult struct {
@@ -85,7 +89,7 @@ func calculateBenchmarkResult(data []time.Duration) ReadBenchmarkResult {
 
 // Read all the SourceIDs from the lightcurve egress server.
 func (c ReaderConfiguration) ReadSourceIDs() []sourceResponse {
-	url := fmt.Sprintf("%s/sources", c.host)
+	url := fmt.Sprintf("%s/sources/", c.host)
 	client := c.GetClient()
 
 	response, err := client.Get(url)
@@ -94,12 +98,17 @@ func (c ReaderConfiguration) ReadSourceIDs() []sourceResponse {
 		log.Panic("Could not get", url)
 	}
 
-	var sources = make([]sourceResponse, 1)
+	var sources []sourceResponse
 
 	err = json.NewDecoder(response.Body).Decode(&sources)
 
 	if err != nil {
-		log.Panic("Cound not unmarshal the list of sources")
+		log.Panic(
+			"Cound not unmarshal the list of sources with response code ",
+			response.StatusCode,
+			" from URL ",
+			url,
+		)
 	}
 
 	return sources
@@ -107,14 +116,14 @@ func (c ReaderConfiguration) ReadSourceIDs() []sourceResponse {
 
 // Return the time taken (round-trip) to get a response.
 func timedHTTPRequest(endpoint string, host string, client *http.Client) time.Duration {
-	url := fmt.Sprintf("%s/%s", endpoint, host)
+	url := fmt.Sprintf("%s/%s", host, endpoint)
 
 	start := time.Now()
 	_, err := client.Get(url)
 	end := time.Now()
 
 	if err != nil {
-		log.Panic("Could not recieve HTTP GET request at", url)
+		log.Panic("Could not recieve HTTP GET request at ", url)
 	}
 
 	return end.Sub(start)
@@ -136,7 +145,7 @@ func (c ReaderConfiguration) readFrequencyBinnedLightcurves(sources []sourceResp
 
 	for number_read < c.sources_to_read {
 		source := sources[RandomIntegerBetween(0, c.sources_to_read)]
-		endpoint := fmt.Sprintf("lightcurves/%s/binned?%s", source.source_id.String(), parameters)
+		endpoint := fmt.Sprintf("lightcurves/%s/binned?%s", source.SourceID, parameters)
 
 		timings[number_read] = timedHTTPRequest(endpoint, c.host, client)
 
@@ -155,7 +164,7 @@ func (c ReaderConfiguration) readUnBinnedLightcurves(sources []sourceResponse) [
 
 	for number_read < c.sources_to_read {
 		source := sources[RandomIntegerBetween(0, c.sources_to_read)]
-		endpoint := fmt.Sprintf("lightcurves/%s/unbinned", source.source_id.String())
+		endpoint := fmt.Sprintf("lightcurves/%s/unbinned", source.SourceID)
 
 		timings[number_read] = timedHTTPRequest(endpoint, c.host, client)
 
@@ -174,7 +183,7 @@ func (c ReaderConfiguration) readSourceSummaries(sources []sourceResponse) []tim
 
 	for number_read < c.sources_to_read {
 		source := sources[RandomIntegerBetween(0, c.sources_to_read)]
-		endpoint := fmt.Sprintf("sources/%s/summary", source.source_id.String())
+		endpoint := fmt.Sprintf("sources/%s/summary", source.SourceID)
 
 		timings[number_read] = timedHTTPRequest(endpoint, c.host, client)
 
@@ -197,13 +206,13 @@ func (c ReaderConfiguration) ReadData() {
 	if c.read_all {
 		data := c.readUnBinnedLightcurves(sources)
 		benchmark := calculateBenchmarkResult(data)
-		log.Printf("Read all result: %s\n", benchmark.String())
+		log.Printf("Read binned result: %s\n", benchmark.String())
 	}
 
 	if c.read_summary {
 		data := c.readSourceSummaries(sources)
 		benchmark := calculateBenchmarkResult(data)
-		log.Printf("Read all result: %s\n", benchmark.String())
+		log.Printf("Read summary result: %s\n", benchmark.String())
 	}
 
 	return
