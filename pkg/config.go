@@ -393,7 +393,7 @@ func (c BenchmarkConfiguration) Print() {
 	}
 
 	fmt.Printf("BENCHMARK_SAVE=%s\n", save_string)
-	fmt.Printf("BENCHMARK_DIRECTRORY", c.directory)
+	fmt.Printf("BENCHMARK_DIRECTRORY=%s\n", c.directory)
 }
 
 // Read the entire configuration from the environment. There
