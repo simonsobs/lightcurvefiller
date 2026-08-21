@@ -16,6 +16,7 @@ type LightcurveFillerConfig struct {
 	Campaign        ObservingCampaign
 	Parquet         ParquetConfiguration
 	Reader          ReaderConfiguration
+	Benchmark       BenchmarkConfiguration
 	NumberOfObjects int
 	PrintConfig     bool
 	LogToFile       string
@@ -271,7 +272,7 @@ func (s LightServeConfiguration) Print() {
 	fmt.Printf("LIGHTSERVE_NUMBER_OF_WORKERS=%d\n", s.number_of_workers)
 }
 
-func ReadParquetConfiguration() ParquetConfiguration {
+func ReadParquetConfigurationFromEnvironment() ParquetConfiguration {
 	return ParquetConfiguration{
 		enable:    readBoolEnv("PARQUET_ENABLE", false),
 		base_path: readStringEnv("PARQUET_BASE_PATH", "."),
@@ -378,6 +379,23 @@ func (c ReaderConfiguration) Print() {
 	fmt.Printf("READER_END=%s\n", c.end_time.Format(time.DateOnly))
 }
 
+func ReadBenchmarkConfigFromEnvironment() BenchmarkConfiguration {
+	return BenchmarkConfiguration{
+		save:      readBoolEnv("BENCHMARK_SAVE", false),
+		directory: readStringEnv("BENCHMARK_DIRECTORY", "."),
+	}
+}
+
+func (c BenchmarkConfiguration) Print() {
+	save_string := "no"
+	if c.save {
+		save_string = "yes"
+	}
+
+	fmt.Printf("BENCHMARK_SAVE=%s\n", save_string)
+	fmt.Printf("BENCHMARK_DIRECTRORY", c.directory)
+}
+
 // Read the entire configuration from the environment. There
 // are no required parameters. By default we print the entire
 // configuration after reading it.
@@ -387,8 +405,9 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		Cutout:          ReadCutoutConfigFromEnvironment(),
 		Lightserve:      ReadLightserveConfigFromEnvironment(),
 		Campaign:        ReadObservingCampaignConfigFromEnvironment(),
-		Parquet:         ReadParquetConfiguration(),
+		Parquet:         ReadParquetConfigurationFromEnvironment(),
 		Reader:          ReadReaderConfigurationFromEnvironment(),
+		Benchmark:       ReadBenchmarkConfigFromEnvironment(),
 		NumberOfObjects: readIntEnv("NUMBER_OF_OBJECTS", 100),
 		PrintConfig:     readBoolEnv("PRINT_CONFIG", true),
 		LogToFile:       readStringEnv("LOG_FILE", ""),
@@ -401,6 +420,7 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		config.Campaign.Print()
 		config.Parquet.Print()
 		config.Reader.Print()
+		config.Benchmark.Print()
 		fmt.Printf("NUMBER_OF_OBJECTS=%d\n", config.NumberOfObjects)
 		fmt.Printf("PRINT_CONFIG=%s\n", "yes")
 		fmt.Printf("LOG_FILE=%s\n", config.LogToFile)
@@ -510,14 +530,19 @@ func (c LightcurveFillerConfig) Run() {
 		}
 
 		if c.Lightserve.enable && !c.Lightserve.upload_parquet {
-			before_upload := time.Now()
-			c.Lightserve.UploadData(observations, cutouts)
-			time_to_upload := time.Since(before_upload)
+			total_time, timings := c.Lightserve.UploadData(observations, cutouts)
+			benchmark, _ := c.Benchmark.SaveWriteBenchmarkResult(
+				c.Lightserve,
+				timings,
+				fmt.Sprintf("%s_upload.json", internal_time.Format(time.DateOnly)),
+				total_time,
+			)
 			log.Printf(
-				"Uploaded %d observations for time %s (took %d ms)\n",
+				"Uploaded %d observations for time %s (took %d ms, mean %d ms per batch)\n",
 				len(observations),
 				internal_time.Format(time.DateOnly),
-				time_to_upload.Milliseconds(),
+				total_time.Milliseconds(),
+				benchmark.Mean.Milliseconds(),
 			)
 		}
 	}
@@ -526,7 +551,7 @@ func (c LightcurveFillerConfig) Run() {
 		log.Printf("Reading information back for %d sources\n", c.Reader.sources_to_read)
 
 		before_read := time.Now()
-		c.Reader.ReadData()
+		c.Reader.ReadData(c.Benchmark)
 		time_to_read := time.Since(before_read)
 		log.Printf(
 			"Total time for all reading operations %d ms",

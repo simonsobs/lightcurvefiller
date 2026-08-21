@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"time"
 )
@@ -35,56 +34,6 @@ type sourceResponse struct {
 	Dec      float64        `json:"dec"`
 	Variable bool           `json:"variable"`
 	Extra    map[string]any `json:"extra"`
-}
-
-type ReadBenchmarkResult struct {
-	Minimum time.Duration
-	Maximum time.Duration
-	Mean    time.Duration
-	Std     time.Duration
-}
-
-// Return a string describing information about the benchmarks
-func (r ReadBenchmarkResult) String() string {
-	return fmt.Sprintf(
-		"Minimum: %d ms, Maximum: %d ms, Mean: %d ms, Standard Deviation: %d ms",
-		r.Minimum.Milliseconds(),
-		r.Maximum.Milliseconds(),
-		r.Mean.Milliseconds(),
-		r.Std.Milliseconds(),
-	)
-}
-
-// Calculate the benchmark result from a list of duratioins
-func calculateBenchmarkResult(data []time.Duration) ReadBenchmarkResult {
-	total := 0.0
-	total_squared := 0.0
-	min := time.Duration(math.MaxInt64)
-	max := time.Duration(0)
-	n := len(data)
-
-	for _, value := range data {
-		if value < min {
-			min = value
-		}
-		if value > max {
-			max = value
-		}
-		value_seconds := value.Abs().Seconds()
-		total += value_seconds
-		total_squared += value_seconds * value_seconds
-	}
-
-	mean := total / float64(n)
-	variance := total_squared/float64(n) - mean*mean
-	standard_deviation := math.Sqrt(variance)
-
-	return ReadBenchmarkResult{
-		Minimum: min,
-		Maximum: max,
-		Mean:    time.Duration(mean * float64(time.Second)),
-		Std:     time.Duration(standard_deviation * float64(time.Second)),
-	}
 }
 
 // Read all the SourceIDs from the lightcurve egress server.
@@ -194,26 +143,30 @@ func (c ReaderConfiguration) readSourceSummaries(sources []sourceResponse) []tim
 }
 
 // Perform the 'read' trials and return data
-func (c ReaderConfiguration) ReadData() {
+func (c ReaderConfiguration) ReadData(b BenchmarkConfiguration) {
 	sources := c.ReadSourceIDs()
 
 	if c.read_frequency {
+		start := time.Now()
 		data := c.readFrequencyBinnedLightcurves(sources)
-		benchmark := calculateBenchmarkResult(data)
-		log.Printf("Read all result: %s\n", benchmark.String())
+		total_time := time.Since(start)
+		benchmark, _ := b.SaveReadBenchmarkResult(c, data, "read_binned.json", total_time)
+		log.Printf("Read frequency binned result: %s\n", benchmark.String())
 	}
 
 	if c.read_all {
+		start := time.Now()
 		data := c.readUnBinnedLightcurves(sources)
-		benchmark := calculateBenchmarkResult(data)
-		log.Printf("Read binned result: %s\n", benchmark.String())
+		total_time := time.Since(start)
+		benchmark, _ := b.SaveReadBenchmarkResult(c, data, "read_unbinned.json", total_time)
+		log.Printf("Read unbinned result: %s\n", benchmark.String())
 	}
 
 	if c.read_summary {
+		start := time.Now()
 		data := c.readSourceSummaries(sources)
-		benchmark := calculateBenchmarkResult(data)
+		total_time := time.Since(start)
+		benchmark, _ := b.SaveReadBenchmarkResult(c, data, "read_summaries.json", total_time)
 		log.Printf("Read summary result: %s\n", benchmark.String())
 	}
-
-	return
 }

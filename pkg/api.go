@@ -138,7 +138,7 @@ func uploadBatch(
 	url string,
 	client *http.Client,
 	batch_id <-chan int,
-	return_code chan<- int,
+	timing chan<- time.Duration,
 ) {
 	for batch := range batch_id {
 		start_batch := batch * batch_size
@@ -165,8 +165,10 @@ func uploadBatch(
 
 		status_code := 999
 		failures := 0
+		time_to_send := time.Duration(-1000)
 
 		for status_code != 200 {
+			start := time.Now()
 			request, err := http.NewRequest(
 				http.MethodPut,
 				url,
@@ -184,6 +186,7 @@ func uploadBatch(
 			}
 
 			status_code = res.StatusCode
+			time_to_send = time.Since(start)
 
 			if status_code != 200 {
 				log.Printf("Error uploading data: %d", status_code)
@@ -196,25 +199,26 @@ func uploadBatch(
 			}
 		}
 
-		// Return the return code to create a dependency (otherwise we don't wait for these to finish!)
-		return_code <- status_code
+		timing <- time_to_send
 	}
 }
 
 // Upload data to the Lightgest API in batches.
 // We always use the batch endpoint, it is much faster.
 // We upload data using goroutines in parallel.
-func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts []Cutout) {
+func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts []Cutout) (time.Duration, []time.Duration) {
 	number_of_batches := int(math.Ceil(float64(len(data)) / float64(c.batch_size)))
 	log.Printf("Uploading using %d batches\n", number_of_batches)
 	url := fmt.Sprintf("%s/observations/batch", c.host)
 	client := c.GetClient()
 
 	batch_ids := make(chan int, number_of_batches)
-	return_codes := make(chan int, number_of_batches)
+	timing_channel := make(chan time.Duration, number_of_batches)
+
+	start := time.Now()
 
 	for w := 1; w <= c.number_of_workers; w++ {
-		go uploadBatch(&data, &cutouts, c.batch_size, url, client, batch_ids, return_codes)
+		go uploadBatch(&data, &cutouts, c.batch_size, url, client, batch_ids, timing_channel)
 	}
 
 	for batch := range number_of_batches {
@@ -223,9 +227,14 @@ func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts 
 
 	close(batch_ids)
 
-	for range number_of_batches {
-		<-return_codes
+	var timings []time.Duration
+	for v := range timing_channel {
+		timings = append(timings, v)
 	}
+
+	total_time := time.Since(start)
+
+	return total_time, timings
 }
 
 // Upload a parquet file that we just made to the API. Does not
