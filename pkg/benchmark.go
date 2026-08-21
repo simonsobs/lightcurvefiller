@@ -93,7 +93,7 @@ func (c BenchmarkConfiguration) SaveWriteBenchmarkResult(
 
 		file_path := fmt.Sprintf("%s/%s", c.directory, filename)
 
-		err = os.WriteFile(file_path, serialized, os.ModePerm)
+		err = os.WriteFile(file_path, serialized, 0666)
 	}
 
 	return benchmark_result, err
@@ -124,9 +124,9 @@ func (c BenchmarkConfiguration) SaveReadBenchmarkResult(
 			log.Fatalln("Unabel to marshal data for the read benchmark save")
 		}
 
-		file_path := fmt.Sprintf(filename, serialized, os.ModePerm)
+		file_path := fmt.Sprintf("%s/%s", c.directory, filename)
 
-		err = os.WriteFile(file_path, serialized, os.ModePerm)
+		err = os.WriteFile(file_path, serialized, 0666)
 	}
 
 	return benchmark_result, err
