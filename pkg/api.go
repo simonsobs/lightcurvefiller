@@ -228,8 +228,8 @@ func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts 
 	close(batch_ids)
 
 	var timings []time.Duration
-	for v := range timing_channel {
-		timings = append(timings, v)
+	for range number_of_batches {
+		timings = append(timings, <-timing_channel)
 	}
 
 	total_time := time.Since(start)

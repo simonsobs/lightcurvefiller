@@ -77,7 +77,7 @@ func (c BenchmarkConfiguration) SaveWriteBenchmarkResult(
 	err := error(nil)
 
 	if c.save {
-		var result map[string]any
+		result := make(map[string]any)
 
 		result["units"] = "ns"
 		result["metadata"] = config
@@ -110,7 +110,7 @@ func (c BenchmarkConfiguration) SaveReadBenchmarkResult(
 	err := error(nil)
 
 	if c.save {
-		var result map[string]any
+		result := make(map[string]any)
 
 		result["units"] = "ns"
 		result["metadata"] = config
