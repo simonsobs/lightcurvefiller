@@ -115,3 +115,14 @@ uv run plot_benchmarks.py benchmark --formats png pdf svg \
 
 Use `uv run plot_benchmarks.py --help` for resolution, validation, and large
 dataset rendering options.
+
+Uploading Existing Data
+-----------------------
+
+Data that has been written to parquet format can be uploaded to the main API
+using this tool. The `cmd/reader/main.go` has the tooling to do this:
+
+```
+go build cmd/reader/main.go
+./main -lightcurve flux_measurements.parquet -source sources.parquet -instruments -cutout cutouts.parquet
+```
