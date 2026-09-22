@@ -19,13 +19,13 @@ type CutoutConfiguration struct {
 }
 
 type Cutout struct {
-	MeasurementID uuid.UUID                         `json:"measurement_id"`
-	Data          [CUTOUT_SIZE][CUTOUT_SIZE]float64 `json:"data"`
-	Time          time.Time                         `json:"time"`
-	Units         string                            `json:"units"`
-	Frequency     int                               `json:"frequency"`
-	Module        string                            `json:"module"`
-	SourceID      uuid.UUID                         `json:"source_id"`
+	MeasurementID uuid.UUID   `json:"measurement_id" parquet:"measurement_id"`
+	Data          [][]float64 `json:"data" parquet:"data,list"`
+	Time          time.Time   `json:"time" parquet:"time"`
+	Units         string      `json:"units" parquet:"units"`
+	Frequency     int         `json:"frequency" parquet:"frequency"`
+	Module        string      `json:"module" parquet:"module"`
+	SourceID      uuid.UUID   `json:"source_id" parquet:"source_id"`
 }
 
 // Generate sample beams for the LAT
@@ -48,7 +48,7 @@ func (c CutoutConfiguration) GenerateCutout(measurement LightcurveDatapoint) Cut
 
 	beam := c.beam_size[measurement.Frequency]
 	beam_square := beam * beam
-	output := [CUTOUT_SIZE][CUTOUT_SIZE]float64{}
+	output := [][]float64{}
 
 	for x := range CUTOUT_SIZE {
 		x_pixel := float64(x-CUTOUT_SIZE/2)*c.pixel_size + RandomSign()*measurement.RaUncertainty

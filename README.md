@@ -83,3 +83,35 @@ READER_END=2025-01-01
 BENCHMARK_SAVE=yes
 BENCHMARK_DIRECTRORY=benchmark
 ```
+
+Plotting benchmark results
+--------------------------
+
+`plot_benchmarks.py` treats every directory below the input root that contains
+benchmark JSON files as a separate use-case. It creates latency overview,
+empirical-CDF, request-order, and upload-trend plots for each use-case, plus
+cross-use-case distribution, percentile, wall-clock, and trend comparisons.
+It also writes file-level and aggregated CSV summaries. All calculations use
+the complete sample set; only dense request-order scatter plots are
+downsampled for rendering.
+
+With `uv`, the script's inline metadata installs an appropriate Python and its
+plotting dependencies automatically:
+
+```shell
+uv run plot_benchmarks.py sample_data --output benchmark_plots
+```
+
+For a conventional Python 3.10-or-newer environment, install
+`requirements-plotting.txt` and invoke the script with `python` instead.
+
+PNG output is the default. PDF and SVG can be emitted at the same time, and a
+named use-case can be used as a latency-ratio baseline:
+
+```shell
+uv run plot_benchmarks.py benchmark --formats png pdf svg \
+  --baseline postgres-json
+```
+
+Use `uv run plot_benchmarks.py --help` for resolution, validation, and large
+dataset rendering options.

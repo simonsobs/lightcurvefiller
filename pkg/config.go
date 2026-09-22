@@ -457,8 +457,14 @@ func (c LightcurveFillerConfig) Run() {
 				time.Since(before_upload_instruments).Milliseconds(),
 			)
 		}
+
+		sources := make([]SourceUpload, len(lightcurves))
+		for i, l := range lightcurves {
+			sources[i] = l.GenerateSource()
+		}
+
 		before_upload_sources := time.Now()
-		c.Lightserve.UploadSources(lightcurves)
+		c.Lightserve.UploadSources(sources)
 		log.Printf(
 			"Successfully uploaded source metadata, took %d ms\n",
 			time.Since(before_upload_sources).Milliseconds(),

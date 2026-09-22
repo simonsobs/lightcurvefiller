@@ -63,9 +63,6 @@ type Lightcurve struct {
 	Name           string `json:"name"`
 }
 
-type ExtraData struct {
-}
-
 type LightcurveDatapoint struct {
 	MeasurementID  uuid.UUID `json:"measurement_id" parquet:"measurement_id"`
 	Frequency      int       `json:"frequency" parquet:"frequency"`
@@ -78,7 +75,7 @@ type LightcurveDatapoint struct {
 	DecUncertainty float64   `json:"dec_uncertainty" parquet:"dec_uncertainty"`
 	Flux           float64   `json:"flux" parquet:"flux"`
 	FluxErr        float64   `json:"flux_err" parquet:"flux_err"`
-	// Extra          ExtraData `json:"extra" parquet:"extra"`
+	Extra          any       `json:"extra" parquet:"extra,variant"`
 }
 
 func NewLightcurve(configuration LightcurveConfiguration) Lightcurve {
@@ -146,5 +143,18 @@ func (l Lightcurve) GenerateDataPoint(t time.Time, m Module) [2]LightcurveDatapo
 			Flux:           flux + flare_flux_b,
 			FluxErr:        RandomFloatBetween(0.5*l.scatter, l.scatter),
 		},
+	}
+}
+
+// Marshals the internal lightcurve type to a SourceUpload type for
+// egress into the API.
+func (l Lightcurve) GenerateSource() SourceUpload {
+	return SourceUpload{
+		SourceID: l.SourceID,
+		Name:     l.Name,
+		Ra:       l.Ra,
+		Dec:      l.Dec,
+		Variable: false,
+		Extra:    nil,
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 // Configuration for the parquet output.
@@ -31,4 +31,51 @@ func (p ParquetConfiguration) WriteData(data []LightcurveDatapoint, date time.Ti
 	err := parquet.WriteFile(filename, data, options...)
 
 	return filename, err
+}
+
+// Read a set of lightcurve data points from a parquet file.
+func ReadLightcurveFromParquet(filename string) []LightcurveDatapoint {
+	log.Printf("Reading parquet file at %s to extract lightcurve datapoints", filename)
+
+	rows, err := parquet.ReadFile[LightcurveDatapoint](filename)
+
+	if err != nil {
+		log.Fatalln("Unable to read paruqet file at", filename, err)
+	}
+
+	for index := range rows {
+		rows[index].Ra = rows[index].Ra - 180.0
+	}
+
+	return rows
+}
+
+// Read a set of cutouts from a parquet file
+func ReadCutoutFromParquet(filename string) []Cutout {
+	log.Printf("Reading parquet file at %s to extract cutouts", filename)
+
+	rows, err := parquet.ReadFile[Cutout](filename)
+
+	if err != nil {
+		log.Fatalln("Unable to read paruqet file at", filename, err)
+	}
+
+	return rows
+}
+
+// Read a set of sources from a parquet file
+func ReadSourceFromParquet(filename string) []SourceUpload {
+	log.Printf("Reading parquet file at %s to extract source information", filename)
+
+	rows, err := parquet.ReadFile[SourceUpload](filename)
+
+	if err != nil {
+		log.Fatalln("Unable to read parquet file at", filename, err)
+	}
+
+	for index := range rows {
+		rows[index].Ra = rows[index].Ra - 180.0
+	}
+
+	return rows
 }

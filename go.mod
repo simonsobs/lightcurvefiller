@@ -16,9 +16,14 @@ require (
 	github.com/minio/asm2plan9s v0.0.0-20200509001527-cdd76441f9d8 // indirect
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	github.com/pierrec/lz4/v4 v4.1.9 // indirect
+	github.com/parquet-go/bitpack v1.0.0 // indirect
+	github.com/parquet-go/jsonlite v1.0.0 // indirect
+	github.com/parquet-go/parquet-go v0.32.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/segmentio/encoding v0.3.5 // indirect
 	github.com/segmentio/parquet-go v0.0.0-20230712180008-5d42db8f0d47 // indirect
-	golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 // indirect
+	github.com/twpayne/go-geom v1.6.1 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
+	google.golang.org/protobuf v1.34.2 // indirect
 )
