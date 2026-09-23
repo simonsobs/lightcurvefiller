@@ -75,7 +75,7 @@ type LightcurveDatapoint struct {
 	DecUncertainty float64   `json:"dec_uncertainty" parquet:"dec_uncertainty"`
 	Flux           float64   `json:"flux" parquet:"flux"`
 	FluxErr        float64   `json:"flux_err" parquet:"flux_err"`
-	Extra          any       `json:"extra" parquet:"extra,variant"`
+	Extra          any       `json:"extra" parquet:"extra"`
 }
 
 func NewLightcurve(configuration LightcurveConfiguration) Lightcurve {
