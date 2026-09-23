@@ -15,6 +15,8 @@ type LightcurveFillerConfig struct {
 	Lightserve      LightServeConfiguration
 	Campaign        ObservingCampaign
 	Parquet         ParquetConfiguration
+	Reader          ReaderConfiguration
+	Benchmark       BenchmarkConfiguration
 	NumberOfObjects int
 	PrintConfig     bool
 	LogToFile       string
@@ -270,7 +272,7 @@ func (s LightServeConfiguration) Print() {
 	fmt.Printf("LIGHTSERVE_NUMBER_OF_WORKERS=%d\n", s.number_of_workers)
 }
 
-func ReadParquetConfiguration() ParquetConfiguration {
+func ReadParquetConfigurationFromEnvironment() ParquetConfiguration {
 	return ParquetConfiguration{
 		enable:    readBoolEnv("PARQUET_ENABLE", false),
 		base_path: readStringEnv("PARQUET_BASE_PATH", "."),
@@ -312,6 +314,88 @@ func (c ObservingCampaign) Print() {
 	fmt.Printf("TELESCOPE=%s\n", c.Telescope.Name)
 }
 
+func ReadReaderConfigurationFromEnvironment() ReaderConfiguration {
+	return ReaderConfiguration{
+		enable:            readBoolEnv("READER_ENABLE", true),
+		host:              readStringEnv("READER_HOST", "http://localhost:8000"),
+		use_bearer:        readBoolEnv("READER_USE_BEARER", false),
+		bearer:            readStringEnv("READER_BEARER_TOKEN", ""),
+		allow_self_signed: readBoolEnv("READER_ALLOW_SELF_SIGNED", true),
+		sources_to_read:   readIntEnv("READER_SOURCES_TO_READ", 100),
+		read_frequency:    readBoolEnv("READER_READ_FREQUENCY", true),
+		read_all:          readBoolEnv("READER_READ_ALL", true),
+		read_summary:      readBoolEnv("READER_READ_SUMMARY", true),
+		start_time:        readTimeEnv("READER_START", time.Now().Add(-time.Duration(time.Hour*8760))),
+		end_time:          readTimeEnv("READER_START", time.Now()),
+	}
+}
+
+func (c ReaderConfiguration) Print() {
+	enable_string := "no"
+	if c.enable {
+		enable_string = "yes"
+	}
+
+	bearer_string := "no"
+	if c.use_bearer {
+		bearer_string = "yes"
+	}
+
+	self_signed_string := "no"
+	if c.allow_self_signed {
+		self_signed_string = "yes"
+	}
+
+	frequency_string := "no"
+	if c.read_frequency {
+		frequency_string = "yes"
+	}
+
+	all_string := "no"
+	if c.read_all {
+		all_string = "yes"
+	}
+
+	summary_string := "no"
+	if c.read_summary {
+		summary_string = "yes"
+	}
+
+	bearer_token_string := ""
+	if c.bearer != "" {
+		bearer_token_string = "<set>"
+	}
+
+	fmt.Printf("READER_ENABLE=%s\n", enable_string)
+	fmt.Printf("READER_HOST=%s\n", c.host)
+	fmt.Printf("READER_USE_BEARER=%s\n", bearer_string)
+	fmt.Printf("READER_BEARER_TOKEN=%s\n", bearer_token_string)
+	fmt.Printf("READER_ALLOW_SELF_SIGNED=%s\n", self_signed_string)
+	fmt.Printf("READER_SOURCES_TO_READ=%d\n", c.sources_to_read)
+	fmt.Printf("READER_READ_FREQUENCY=%s\n", frequency_string)
+	fmt.Printf("READER_READ_ALL=%s\n", all_string)
+	fmt.Printf("READER_READ_SUMMARY=%s\n", summary_string)
+	fmt.Printf("READER_START=%s\n", c.start_time.Format(time.DateOnly))
+	fmt.Printf("READER_END=%s\n", c.end_time.Format(time.DateOnly))
+}
+
+func ReadBenchmarkConfigFromEnvironment() BenchmarkConfiguration {
+	return BenchmarkConfiguration{
+		save:      readBoolEnv("BENCHMARK_SAVE", false),
+		directory: readStringEnv("BENCHMARK_DIRECTORY", "."),
+	}
+}
+
+func (c BenchmarkConfiguration) Print() {
+	save_string := "no"
+	if c.save {
+		save_string = "yes"
+	}
+
+	fmt.Printf("BENCHMARK_SAVE=%s\n", save_string)
+	fmt.Printf("BENCHMARK_DIRECTRORY=%s\n", c.directory)
+}
+
 // Read the entire configuration from the environment. There
 // are no required parameters. By default we print the entire
 // configuration after reading it.
@@ -321,7 +405,9 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		Cutout:          ReadCutoutConfigFromEnvironment(),
 		Lightserve:      ReadLightserveConfigFromEnvironment(),
 		Campaign:        ReadObservingCampaignConfigFromEnvironment(),
-		Parquet:         ReadParquetConfiguration(),
+		Parquet:         ReadParquetConfigurationFromEnvironment(),
+		Reader:          ReadReaderConfigurationFromEnvironment(),
+		Benchmark:       ReadBenchmarkConfigFromEnvironment(),
 		NumberOfObjects: readIntEnv("NUMBER_OF_OBJECTS", 100),
 		PrintConfig:     readBoolEnv("PRINT_CONFIG", true),
 		LogToFile:       readStringEnv("LOG_FILE", ""),
@@ -333,6 +419,8 @@ func ReadConfigFromEnvironment() LightcurveFillerConfig {
 		config.Lightserve.Print()
 		config.Campaign.Print()
 		config.Parquet.Print()
+		config.Reader.Print()
+		config.Benchmark.Print()
 		fmt.Printf("NUMBER_OF_OBJECTS=%d\n", config.NumberOfObjects)
 		fmt.Printf("PRINT_CONFIG=%s\n", "yes")
 		fmt.Printf("LOG_FILE=%s\n", config.LogToFile)
@@ -369,8 +457,14 @@ func (c LightcurveFillerConfig) Run() {
 				time.Since(before_upload_instruments).Milliseconds(),
 			)
 		}
+
+		sources := make([]SourceUpload, len(lightcurves))
+		for i, l := range lightcurves {
+			sources[i] = l.GenerateSource()
+		}
+
 		before_upload_sources := time.Now()
-		c.Lightserve.UploadSources(lightcurves)
+		c.Lightserve.UploadSources(sources)
 		log.Printf(
 			"Successfully uploaded source metadata, took %d ms\n",
 			time.Since(before_upload_sources).Milliseconds(),
@@ -442,15 +536,32 @@ func (c LightcurveFillerConfig) Run() {
 		}
 
 		if c.Lightserve.enable && !c.Lightserve.upload_parquet {
-			before_upload := time.Now()
-			c.Lightserve.UploadData(observations, cutouts)
-			time_to_upload := time.Since(before_upload)
+			total_time, timings := c.Lightserve.UploadData(observations, cutouts)
+			benchmark, _ := c.Benchmark.SaveWriteBenchmarkResult(
+				c.Lightserve,
+				timings,
+				fmt.Sprintf("%s_upload.json", internal_time.Format(time.DateOnly)),
+				total_time,
+			)
 			log.Printf(
-				"Uploaded %d observations for time %s (took %d ms)\n",
+				"Uploaded %d observations for time %s (took %d ms, mean %d ms per batch)\n",
 				len(observations),
 				internal_time.Format(time.DateOnly),
-				time_to_upload.Milliseconds(),
+				total_time.Milliseconds(),
+				benchmark.Mean.Milliseconds(),
 			)
 		}
+	}
+
+	if c.Reader.enable {
+		log.Printf("Reading information back for %d sources\n", c.Reader.sources_to_read)
+
+		before_read := time.Now()
+		c.Reader.ReadData(c.Benchmark)
+		time_to_read := time.Since(before_read)
+		log.Printf(
+			"Total time for all reading operations %d ms",
+			time_to_read.Milliseconds(),
+		)
 	}
 }

@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Configuration for API connections to the Lightgest server
@@ -30,6 +32,16 @@ type InstrumentUploadDetails struct {
 	Detail string `json:"detail"`
 }
 
+// Helper type for uploading sources
+type SourceUpload struct {
+	SourceID uuid.UUID `json:"source_id" parquet:"source_id"`
+	Name     string    `json:"name" parquet:"name"`
+	Ra       float64   `json:"ra" parquet:"ra"`
+	Dec      float64   `json:"dec" parquet:"dec"`
+	Variable bool      `json:"variable" parquet:"variable"`
+	Extra    any       `json:"extra" parquet:"extra,variant"`
+}
+
 // Helper type for uploading modules as 'instruments'
 type InstrumentUpload struct {
 	Frequency  int                     `json:"frequency"`
@@ -45,18 +57,17 @@ type DataUpload struct {
 	Cutouts          []Cutout              `json:"cutouts"`
 }
 
-// Upload source information to the Lightgest API. Currently
-// no batch endpoint is available so this may take some time.
-func (c LightServeConfiguration) UploadSources(lightcurves []Lightcurve) {
+// Upload source information to the Lightgest API.
+func (c LightServeConfiguration) UploadSources(sources []SourceUpload) {
 	url := fmt.Sprintf("%s/sources/batch", c.host)
 	client := c.GetClient()
-	number_of_batches := int(math.Ceil(float64(len(lightcurves)) / float64(c.batch_size)))
+	number_of_batches := int(math.Ceil(float64(len(sources)) / float64(c.batch_size)))
 
 	for batch := range number_of_batches {
 		start_batch := batch * c.batch_size
-		end_batch := min((batch+1)*c.batch_size, len(lightcurves))
+		end_batch := min((batch+1)*c.batch_size, len(sources))
 
-		batched_data := lightcurves[start_batch:end_batch]
+		batched_data := sources[start_batch:end_batch]
 		json_content, err := json.Marshal(batched_data)
 
 		if err != nil {
@@ -131,30 +142,20 @@ func (c LightServeConfiguration) UploadInstruments(telescope Telescope) {
 	}
 }
 
-func uploadBatch(
+func uploadDataBatch(
 	data *[]LightcurveDatapoint,
-	cutouts *[]Cutout,
 	batch_size int,
 	url string,
 	client *http.Client,
 	batch_id <-chan int,
-	return_code chan<- int,
+	timing chan<- time.Duration,
 ) {
 	for batch := range batch_id {
 		start_batch := batch * batch_size
 		end_batch := min((batch+1)*batch_size, len(*data))
 
-		var batched_cutouts []Cutout
-
-		if (*cutouts) != nil {
-			batched_cutouts = (*cutouts)[start_batch:end_batch]
-		} else {
-			batched_cutouts = nil
-		}
-
 		data_upload := DataUpload{
 			FluxMeasurements: (*data)[start_batch:end_batch],
-			Cutouts:          batched_cutouts,
 		}
 
 		json_batch, err := json.Marshal(data_upload)
@@ -165,8 +166,10 @@ func uploadBatch(
 
 		status_code := 999
 		failures := 0
+		time_to_send := time.Duration(-1000)
 
 		for status_code != 200 {
+			start := time.Now()
 			request, err := http.NewRequest(
 				http.MethodPut,
 				url,
@@ -184,6 +187,7 @@ func uploadBatch(
 			}
 
 			status_code = res.StatusCode
+			time_to_send = time.Since(start)
 
 			if status_code != 200 {
 				log.Printf("Error uploading data: %d", status_code)
@@ -196,36 +200,131 @@ func uploadBatch(
 			}
 		}
 
-		// Return the return code to create a dependency (otherwise we don't wait for these to finish!)
-		return_code <- status_code
+		timing <- time_to_send
+	}
+}
+
+func uploadCutoutBatch(
+	data *[]Cutout,
+	batch_size int,
+	url string,
+	client *http.Client,
+	batch_id <-chan int,
+	timing chan<- time.Duration,
+) {
+	for batch := range batch_id {
+		start_batch := batch * batch_size
+		end_batch := min((batch+1)*batch_size, len(*data))
+
+		data_upload := DataUpload{
+			Cutouts: (*data)[start_batch:end_batch],
+		}
+
+		json_batch, err := json.Marshal(data_upload)
+
+		if err != nil {
+			log.Panic("Could not marshal lightcurve data to JSON")
+		}
+
+		status_code := 999
+		failures := 0
+		time_to_send := time.Duration(-1000)
+
+		for status_code != 200 {
+			start := time.Now()
+			request, err := http.NewRequest(
+				http.MethodPut,
+				url,
+				bytes.NewBuffer(json_batch),
+			)
+
+			if err != nil {
+				log.Panic("Error creating HTTP request")
+			}
+
+			res, err := client.Do(request)
+
+			if err != nil {
+				body, readErr := io.ReadAll(res.Body)
+				res.Body.Close()
+				log.Println("Failed to send data to /observations/batch endpoint", res, body, readErr)
+			}
+
+			status_code = res.StatusCode
+			time_to_send = time.Since(start)
+
+			if status_code != 200 {
+				log.Printf("Error uploading data: %d", status_code)
+				time.Sleep(time.Duration(failures*5) * time.Second)
+				failures += 1
+			}
+
+			if failures > 5 {
+				log.Panic("Failed over 5 times to send data to API endpoint")
+			}
+		}
+
+		timing <- time_to_send
 	}
 }
 
 // Upload data to the Lightgest API in batches.
 // We always use the batch endpoint, it is much faster.
 // We upload data using goroutines in parallel.
-func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts []Cutout) {
-	number_of_batches := int(math.Ceil(float64(len(data)) / float64(c.batch_size)))
-	log.Printf("Uploading using %d batches\n", number_of_batches)
+func (c LightServeConfiguration) UploadData(data []LightcurveDatapoint, cutouts []Cutout) (time.Duration, []time.Duration) {
+	number_of_data_batches := int(math.Ceil(float64(len(data)) / float64(c.batch_size)))
+	number_of_cutout_batches := int(math.Ceil(float64(len(cutouts)) / float64(c.batch_size)))
+	total_batches := number_of_cutout_batches + number_of_data_batches
+	log.Printf("Uploading using %d batches\n", total_batches)
 	url := fmt.Sprintf("%s/observations/batch", c.host)
 	client := c.GetClient()
 
-	batch_ids := make(chan int, number_of_batches)
-	return_codes := make(chan int, number_of_batches)
+	data_batch_ids := make(chan int, number_of_data_batches)
+	data_timing_channel := make(chan time.Duration, number_of_data_batches)
+	var timings []time.Duration
 
-	for w := 1; w <= c.number_of_workers; w++ {
-		go uploadBatch(&data, &cutouts, c.batch_size, url, client, batch_ids, return_codes)
+	start := time.Now()
+
+	// Upload all data before any cutouts because we rely on foreign key constraints
+	if data != nil {
+		for w := 1; w <= c.number_of_workers; w++ {
+			go uploadDataBatch(&data, c.batch_size, url, client, data_batch_ids, data_timing_channel)
+		}
+
+		for batch := range number_of_data_batches {
+			data_batch_ids <- batch
+		}
+
+		close(data_batch_ids)
+
+		for range number_of_data_batches {
+			timings = append(timings, <-data_timing_channel)
+		}
 	}
 
-	for batch := range number_of_batches {
-		batch_ids <- batch
+	// Now we can upload the cutouts as we have confirmed we have all the flux measurements.
+	if cutouts != nil {
+		cutout_batch_ids := make(chan int, number_of_cutout_batches)
+		cutout_timing_channel := make(chan time.Duration, number_of_cutout_batches)
+
+		for w := 1; w <= c.number_of_workers; w++ {
+			go uploadCutoutBatch(&cutouts, c.batch_size, url, client, cutout_batch_ids, cutout_timing_channel)
+		}
+
+		for batch := range number_of_cutout_batches {
+			cutout_batch_ids <- batch
+		}
+
+		close(cutout_batch_ids)
+
+		for range number_of_cutout_batches {
+			timings = append(timings, <-cutout_timing_channel)
+		}
 	}
 
-	close(batch_ids)
+	total_time := time.Since(start)
 
-	for range number_of_batches {
-		<-return_codes
-	}
+	return total_time, timings
 }
 
 // Upload a parquet file that we just made to the API. Does not

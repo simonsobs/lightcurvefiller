@@ -70,4 +70,59 @@ PARQUET_COMPRESS=yes
 NUMBER_OF_OBJECTS=100
 PRINT_CONFIG=yes
 LOG_FILE=
+READER_HOST=http://localhost:80/egress
+READER_USE_BEARER=no
+READER_BEARER_TOKEN=
+READER_ALLOW_SELF_SIGNED=yes
+READER_SOURCES_TO_READ=2048
+READER_READ_FREQUENCY=yes
+READER_READ_ALL=yes
+READER_READ_SUMMARY=yes
+READER_START=2025-01-01
+READER_END=2025-01-01
+BENCHMARK_SAVE=yes
+BENCHMARK_DIRECTRORY=benchmark
+```
+
+Plotting benchmark results
+--------------------------
+
+`plot_benchmarks.py` treats every directory below the input root that contains
+benchmark JSON files as a separate use-case. It creates latency overview,
+empirical-CDF, request-order, and upload-trend plots for each use-case, plus
+cross-use-case distribution, percentile, wall-clock, and trend comparisons.
+It also writes file-level and aggregated CSV summaries. All calculations use
+the complete sample set; only dense request-order scatter plots are
+downsampled for rendering.
+
+With `uv`, the script's inline metadata installs an appropriate Python and its
+plotting dependencies automatically:
+
+```shell
+uv run plot_benchmarks.py sample_data --output benchmark_plots
+```
+
+For a conventional Python 3.10-or-newer environment, install
+`requirements-plotting.txt` and invoke the script with `python` instead.
+
+PNG output is the default. PDF and SVG can be emitted at the same time, and a
+named use-case can be used as a latency-ratio baseline:
+
+```shell
+uv run plot_benchmarks.py benchmark --formats png pdf svg \
+  --baseline postgres-json
+```
+
+Use `uv run plot_benchmarks.py --help` for resolution, validation, and large
+dataset rendering options.
+
+Uploading Existing Data
+-----------------------
+
+Data that has been written to parquet format can be uploaded to the main API
+using this tool. The `cmd/reader/main.go` has the tooling to do this:
+
+```
+go build cmd/reader/main.go
+./main -lightcurve flux_measurements.parquet -source sources.parquet -instruments -cutout cutouts.parquet
 ```

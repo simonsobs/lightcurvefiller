@@ -5,3 +5,9 @@ main
 *.swp
 env-parquet
 .vscode/*
+benchmark_plots/
+__pycache__/
+.localenv
+*.env
+*.DS_Store
+*.json

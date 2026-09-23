@@ -40,23 +40,20 @@ func (t *HeaderTransport) base() http.RoundTripper {
 	return http.DefaultTransport
 }
 
-func (c LightServeConfiguration) GetClient() *http.Client {
-	if HTTP_CLIENT_SET {
-		return HTTP_CLIENT
-	}
-
+// Set the global client variable
+func setClient(bearer string, use_bearer, allow_self_signed bool) {
 	transport := HeaderTransport{
 		Headers: map[string]string{
 			"Content-Type": "application/json",
 		},
 	}
 
-	if c.use_bearer {
-		transport.Headers["Authorization"] = fmt.Sprintf("Bearer %s", c.bearer)
+	if use_bearer {
+		transport.Headers["Authorization"] = fmt.Sprintf("Bearer %s", bearer)
 		log.Printf("Added bearer authorization header")
 	}
 
-	if c.allow_self_signed {
+	if allow_self_signed {
 		transport.TLSClientConfig = &tls.Config{
 			InsecureSkipVerify: true,
 		}
@@ -65,6 +62,24 @@ func (c LightServeConfiguration) GetClient() *http.Client {
 
 	HTTP_CLIENT = &http.Client{Transport: &transport}
 	HTTP_CLIENT_SET = true
+}
+
+func (c LightServeConfiguration) GetClient() *http.Client {
+	if HTTP_CLIENT_SET {
+		return HTTP_CLIENT
+	}
+
+	setClient(c.bearer, c.use_bearer, c.allow_self_signed)
+
+	return c.GetClient()
+}
+
+func (c ReaderConfiguration) GetClient() *http.Client {
+	if HTTP_CLIENT_SET {
+		return HTTP_CLIENT
+	}
+
+	setClient(c.bearer, c.use_bearer, c.allow_self_signed)
 
 	return c.GetClient()
 }
