@@ -48,7 +48,10 @@ func (c CutoutConfiguration) GenerateCutout(measurement LightcurveDatapoint) Cut
 
 	beam := c.beam_size[measurement.Frequency]
 	beam_square := beam * beam
-	output := [CUTOUT_SIZE][CUTOUT_SIZE]float64{}
+	output := make([][]float64, CUTOUT_SIZE)
+	for i := range output {
+		output[i] = make([]float64, CUTOUT_SIZE)
+	}
 
 	for x := range CUTOUT_SIZE {
 		x_pixel := float64(x-CUTOUT_SIZE/2)*c.pixel_size + RandomSign()*measurement.RaUncertainty
