@@ -326,7 +326,7 @@ func ReadReaderConfigurationFromEnvironment() ReaderConfiguration {
 		read_all:          readBoolEnv("READER_READ_ALL", true),
 		read_summary:      readBoolEnv("READER_READ_SUMMARY", true),
 		start_time:        readTimeEnv("READER_START", time.Now().Add(-time.Duration(time.Hour*8760))),
-		end_time:          readTimeEnv("READER_START", time.Now()),
+		end_time:          readTimeEnv("READER_END", time.Now()),
 	}
 }
 
